@@ -1,6 +1,6 @@
 import os
 from app import app, db, login_manager
-from flask import render_template, request, redirect, url_for, flash, session, abort
+from flask import render_template, request, redirect, url_for, flash, session, abort, send_from_directory
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash
@@ -31,11 +31,14 @@ def upload():
     # Validate file upload on submit
     if form.validate_on_submit():
         # Get file data and save to your uploads folder
-
+        photo = form.photo.data
+        filename = secure_filename(photo.filename)
+        photo.save(os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER'], filename))
+        
         flash('File Saved', 'success')
-        return redirect(url_for('home')) # Update this to redirect the user to a route that displays all uploaded image files
+        return redirect(url_for('files')) # Update this to redirect the user to a route that displays all uploaded image files
 
-    return render_template('upload.html')
+    return render_template('upload.html', form=form)
 
 
 @app.route('/login', methods=['POST', 'GET'])
@@ -68,6 +71,41 @@ def login():
         return redirect(url_for("home"))  # The user should be redirected to the upload form instead
     return render_template("login.html", form=form)
 
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('home'))
+ 
+ 
+@app.route('/files')
+@login_required
+def files():
+    images = get_uploaded_images()
+    return render_template('files.html', images=images)
+ 
+ 
+@app.route('/uploads/<filename>')
+@login_required
+def get_image(filename):
+    return send_from_directory(
+        os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER']),
+        filename
+    )
+ 
+ 
+def get_uploaded_images():
+    rootdir = os.getcwd()
+    upload_folder = app.config['UPLOAD_FOLDER']
+    images = []
+    for subdir, dirs, files in os.walk(os.path.join(rootdir, upload_folder)):
+        for file in files:
+            if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                images.append(file)
+    return images
+
 # user_loader callback. This callback is used to reload the user object from
 # the user ID stored in the session
 @login_manager.user_loader
@@ -85,7 +123,7 @@ def flash_errors(form):
             flash(u"Error in the %s field - %s" % (
                 getattr(form, field).label.text,
                 error
-), 'danger')
+            ), 'danger')
 
 @app.route('/<file_name>.txt')
 def send_text_file(file_name):
